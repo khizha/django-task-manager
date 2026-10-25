@@ -4,11 +4,12 @@ from django.utils import timezone
 from django.db.models import Count
 
 from rest_framework.decorators import api_view
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Task
-from .serializers import TaskSerializer
+from .models import Task, SubTask
+from .serializers import TaskSerializer, SubTaskSerializer, SubTaskCreateSerializer
 
 # Create your views here.
 
@@ -82,3 +83,92 @@ def task_statistics(request):
         },
         'outdated_tasks': outdated_tasks
     }, status=status.HTTP_200_OK)
+
+
+class SubTaskListCreateView(APIView):
+
+    # Получение списка всех подзадач
+    def get(self, request):
+        subtasks = SubTask.objects.all()
+        serializer = SubTaskSerializer(subtasks, many=True)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+    # Создание новой подзадачи
+    def post(self, request):
+        serializer = SubTaskCreateSerializer(data=request.data)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                serializer.data,
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+class SubTaskDetailUpdateDeleteView(APIView):
+
+    # Получение подзадачи по ID
+    def get(self, request, subtask_id):
+        try:
+            subtask = SubTask.objects.get(pk=subtask_id)
+        except SubTask.DoesNotExist:
+            return Response(
+                {'error': 'Подзадача не найдена'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = SubTaskSerializer(subtask)
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+    # Обновление подзадачи
+    def put(self, request, subtask_id):
+        try:
+            subtask = SubTask.objects.get(pk=subtask_id)
+        except SubTask.DoesNotExist:
+            return Response(
+                {'error': 'Подзадача не найдена'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = SubTaskCreateSerializer(
+            subtask,
+            data=request.data
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Удаление подзадачи
+    def delete(self, request, subtask_id):
+        try:
+            subtask = SubTask.objects.get(pk=subtask_id)
+        except SubTask.DoesNotExist:
+            return Response(
+                {'error': 'Подзадача не найдена'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        subtask.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
