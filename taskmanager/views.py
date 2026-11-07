@@ -7,6 +7,7 @@ from rest_framework.decorators import api_view
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 
 from .models import Task, SubTask
 from .serializers import TaskSerializer, SubTaskSerializer, SubTaskCreateSerializer
@@ -37,8 +38,16 @@ task_create.cls.serializer_class = TaskSerializer #показать в марш�
 # Получение списка всех задач
 @api_view(['GET'])
 def tasks_get_all(request):
+    weekday = request.query_params.get('weekday') # получаем параметр weekday из URL. Если параметра нет,
+                                                  # weekday будет none
+
     tasks = Task.objects.all()
+
+    if weekday: # если параметр не пустой, т.е. был указан в url, фильтруем задачи по дню недели в дедлайне
+        tasks = tasks.filter(deadline__week_day=weekday)
+
     serializer = TaskSerializer(tasks, many=True)
+
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -85,17 +94,39 @@ def task_statistics(request):
     }, status=status.HTTP_200_OK)
 
 
-class SubTaskListCreateView(APIView):
+class SubTaskListCreateView(APIView, PageNumberPagination):
+    page_size = 3
 
-    # Получение списка всех подзадач
+    # Получение списка всех подзадач с пагинацией
     def get(self, request):
-        subtasks = SubTask.objects.all()
-        serializer = SubTaskSerializer(subtasks, many=True)
+        # название основной задачи из параметров URL
+        task_title = request.query_params.get('task_title')
 
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
-        )
+        # статус подзадачи из параметров URL
+        status_filter = request.query_params.get('status')
+
+        # словарь для фильтров, хранит параметры, по которым будем фильтровать подзадачи
+        filters = {}
+
+        # если в url указано название основной задачи, добавить его в словарь фильтров
+        if task_title:
+            filters['task__title__icontains'] = task_title
+
+        # если в url указан статус подзадачи, добавить его в словарь фильтров
+        if status_filter:
+            filters['status'] = status_filter
+
+        #   подзадачи из базы данных с учётом переданных фильтров
+        subtasks = SubTask.objects.filter(**filters)
+
+        # разбивка списка подзадач на страницы
+        results = self.paginate_queryset(subtasks, request, view=self)
+
+        serializer = SubTaskSerializer(results, many=True)
+
+        # результат с информацией о пагинации
+        return self.get_paginated_response(serializer.data)
+
 
     # Создание новой подзадачи
     def post(self, request):
