@@ -1,69 +1,45 @@
-from django.shortcuts import render
-
 from django.utils import timezone
 from django.db.models import Count
 
 from rest_framework.decorators import api_view
-from rest_framework.views import APIView
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.pagination import PageNumberPagination
+from rest_framework import filters
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.pagination import PageNumberPagination
-
 from .models import Task, SubTask
-from .serializers import TaskSerializer, SubTaskSerializer, SubTaskCreateSerializer
+from .serializers import TaskSerializer, TaskCreateSerializer, SubTaskSerializer, SubTaskCreateSerializer
 
 # Create your views here.
 
-# Создание новой задачи
-@api_view(['POST'])
-def task_create(request):
-    serializer = TaskSerializer(data=request.data)
+# получение списка задач и создание новой задачи
+class TaskListCreateView(ListCreateAPIView):
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
 
-    if serializer.is_valid():
-        serializer.save()
-        return Response(
-            serializer.data,
-            status=status.HTTP_201_CREATED
-        )
+    # фильтрация по статусу и дедлайну
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'deadline']
 
-    return Response(
-        serializer.errors,
-        status=status.HTTP_400_BAD_REQUEST
-    )
+    # поиск по названию и описанию задачи
+    search_fields = ['title', 'description']
 
+    # сортировка по дате создания
+    ordering_fields = ['created_at']
 
-task_create.cls.serializer_class = TaskSerializer #показать в маршруте поля модели Task
-
-
-# Получение списка всех задач
-@api_view(['GET'])
-def tasks_get_all(request):
-    weekday = request.query_params.get('weekday') # получаем параметр weekday из URL. Если параметра нет,
-                                                  # weekday будет none
-
-    tasks = Task.objects.all()
-
-    if weekday: # если параметр не пустой, т.е. был указан в url, фильтруем задачи по дню недели в дедлайне
-        tasks = tasks.filter(deadline__week_day=weekday)
-
-    serializer = TaskSerializer(tasks, many=True)
-
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return TaskCreateSerializer
+        return TaskSerializer
 
 
-# Получение задачи по ее ID
-@api_view(['GET'])
-def task_get_one(request, task_id ):
-    try:
-        task = Task.objects.get(pk=task_id )
-    except Task.DoesNotExist:
-        return Response(
-            {'error': 'Задача не найдена'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    serializer = TaskSerializer(task)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+# получение, обновление и удаление одной задачи
+class TaskDetailView(RetrieveUpdateDestroyAPIView):
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+    lookup_url_kwarg = 'task_id' # id задачи будет передаваться как параметр task_id в url. если задача gj id не будет
+                                 # найдена, то Generic View сам вернёт 404
 
 
 # Получение статистики по задачам
@@ -94,112 +70,49 @@ def task_statistics(request):
     }, status=status.HTTP_200_OK)
 
 
-class SubTaskListCreateView(APIView, PageNumberPagination):
+
+# Настройка пагинации для подзадач
+class SubTaskPagination(PageNumberPagination):
     page_size = 3
 
-    # Получение списка всех подзадач с пагинацией
-    def get(self, request):
-        # название основной задачи из параметров URL
-        task_title = request.query_params.get('task_title')
 
-        # статус подзадачи из параметров URL
-        status_filter = request.query_params.get('status')
+# Получение списка подзадач и создание новой подзадачи
+class SubTaskListCreateView(ListCreateAPIView):
+    queryset = SubTask.objects.all()
 
-        # словарь для фильтров, хранит параметры, по которым будем фильтровать подзадачи
-        filters = {}
+    # пагинация: по 3 подзадачи на странице
+    pagination_class = SubTaskPagination
 
-        # если в url указано название основной задачи, добавить его в словарь фильтров
-        if task_title:
-            filters['task__title__icontains'] = task_title
+    # фильтрация, поиск и сортировка
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter
+    ]
 
-        # если в url указан статус подзадачи, добавить его в словарь фильтров
-        if status_filter:
-            filters['status'] = status_filter
+    # фильтрация по статусу и дедлайну
+    filterset_fields = ['status', 'deadline']
 
-        #   подзадачи из базы данных с учётом переданных фильтров
-        subtasks = SubTask.objects.filter(**filters)
+    # поиск по названию и описанию
+    search_fields = ['title', 'description']
 
-        # разбивка списка подзадач на страницы
-        results = self.paginate_queryset(subtasks, request, view=self)
+    # сортировка по дате создания
+    ordering_fields = ['created_at']
 
-        serializer = SubTaskSerializer(results, many=True)
-
-        # результат с информацией о пагинации
-        return self.get_paginated_response(serializer.data)
-
-
-    # Создание новой подзадачи
-    def post(self, request):
-        serializer = SubTaskCreateSerializer(data=request.data)
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                serializer.data,
-                status=status.HTTP_201_CREATED
-            )
-
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    # сериализатор - в зависимости от метода запроса
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return SubTaskCreateSerializer
+        return SubTaskSerializer
 
 
-class SubTaskDetailUpdateDeleteView(APIView):
+# Получение, обновление и удаление одной подзадачи
+class SubTaskDetailUpdateDeleteView(RetrieveUpdateDestroyAPIView):
+    queryset = SubTask.objects.all()
+    lookup_url_kwarg = 'subtask_id'
 
-    # Получение подзадачи по ID
-    def get(self, request, subtask_id):
-        try:
-            subtask = SubTask.objects.get(pk=subtask_id)
-        except SubTask.DoesNotExist:
-            return Response(
-                {'error': 'Подзадача не найдена'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        serializer = SubTaskSerializer(subtask)
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
-        )
-
-    # Обновление подзадачи
-    def put(self, request, subtask_id):
-        try:
-            subtask = SubTask.objects.get(pk=subtask_id)
-        except SubTask.DoesNotExist:
-            return Response(
-                {'error': 'Подзадача не найдена'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        serializer = SubTaskCreateSerializer(
-            subtask,
-            data=request.data
-        )
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                serializer.data,
-                status=status.HTTP_200_OK
-            )
-
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # Удаление подзадачи
-    def delete(self, request, subtask_id):
-        try:
-            subtask = SubTask.objects.get(pk=subtask_id)
-        except SubTask.DoesNotExist:
-            return Response(
-                {'error': 'Подзадача не найдена'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        subtask.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
+    # сериализатор - в зависимости от метода запроса
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return SubTaskCreateSerializer
+        return SubTaskSerializer
