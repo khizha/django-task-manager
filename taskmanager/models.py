@@ -1,8 +1,21 @@
 from django.db import models
+from django.utils import timezone
+
+# возвращает только неудалённые категории
+class SoftDeleteManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
 
 # Create your models here.
 class Category(models.Model):
     name = models.CharField(max_length=100)
+
+    # для мягкого удаления
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    # менеджер для мягкого удаления
+    objects = SoftDeleteManager()
 
     class Meta:                                         # Дополнительные настройки модели Category. В нашем случае -
                                                         # Имя таблицы в базе данных: 'task_manager_category'.
@@ -20,6 +33,12 @@ class Category(models.Model):
 
     def __str__(self):
         return self.name
+
+    # при удалении фактически категории помечаем удаленными, но физически не удаляем
+    def delete(self, *args, **kwargs):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save(update_fields=['is_deleted', 'deleted_at'])
 
 
 class Task(models.Model):

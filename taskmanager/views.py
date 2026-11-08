@@ -1,17 +1,47 @@
 from django.utils import timezone
 from django.db.models import Count
 
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
-from rest_framework import status
-from .models import Task, SubTask
-from .serializers import TaskSerializer, TaskCreateSerializer, SubTaskSerializer, SubTaskCreateSerializer
+from rest_framework import status, viewsets
+from .models import Task, SubTask, Category
+from .serializers import (
+    TaskSerializer,
+    TaskCreateSerializer,
+    SubTaskSerializer,
+    SubTaskCreateSerializer,
+    CategorySerializer,
+)
 
 # Create your views here.
+
+# CRUD для категорий
+class CategoryViewSet(viewsets.ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+
+    # количества задач, связанных с каждой категорией
+    @action(detail=False, methods=['get'])
+    def count_tasks(self, request):
+        categories = Category.objects.annotate(
+            tasks_count=Count('task')
+        )
+
+        data = [
+            {
+                'id': category.id,
+                'name': category.name,
+                'tasks_count': category.tasks_count,
+            }
+            for category in categories
+        ]
+
+        return Response(data)
+
 
 # получение списка задач и создание новой задачи
 class TaskListCreateView(ListCreateAPIView):
