@@ -1,13 +1,13 @@
 from django.utils import timezone
 from django.db.models import Count
 
-from rest_framework.decorators import api_view, action
+from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
-from rest_framework import status, viewsets
+from rest_framework import status, viewsets, permissions
 from .models import Task, SubTask, Category
 from .serializers import (
     TaskSerializer,
@@ -16,6 +16,8 @@ from .serializers import (
     SubTaskCreateSerializer,
     CategorySerializer,
 )
+from .permissions import CustomPermission
+
 
 # Create your views here.
 
@@ -23,6 +25,7 @@ from .serializers import (
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+    permission_classes = [CustomPermission]
 
     # количества задач, связанных с каждой категорией
     @action(detail=False, methods=['get'])
@@ -48,6 +51,8 @@ class TaskListCreateView(ListCreateAPIView):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
 
+    permission_classes = [CustomPermission]
+
     # фильтрация по статусу и дедлайну
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'deadline']
@@ -68,12 +73,15 @@ class TaskListCreateView(ListCreateAPIView):
 class TaskDetailView(RetrieveUpdateDestroyAPIView):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
+    permission_classes = [CustomPermission]
     lookup_url_kwarg = 'task_id' # id задачи будет передаваться как параметр task_id в url. если задача gj id не будет
                                  # найдена, то Generic View сам вернёт 404
 
 
+
 # Получение статистики по задачам
 @api_view(['GET'])
+@permission_classes([CustomPermission])
 def task_statistics(request):
     # Общее количество задач
     total_tasks = Task.objects.count()
@@ -109,6 +117,7 @@ class SubTaskPagination(PageNumberPagination):
 # Получение списка подзадач и создание новой подзадачи
 class SubTaskListCreateView(ListCreateAPIView):
     queryset = SubTask.objects.all()
+    permission_classes = [CustomPermission]
 
     # пагинация: по 3 подзадачи на странице
     pagination_class = SubTaskPagination
@@ -139,6 +148,7 @@ class SubTaskListCreateView(ListCreateAPIView):
 # Получение, обновление и удаление одной подзадачи
 class SubTaskDetailUpdateDeleteView(RetrieveUpdateDestroyAPIView):
     queryset = SubTask.objects.all()
+    permission_classes = [CustomPermission]
     lookup_url_kwarg = 'subtask_id'
 
     # сериализатор - в зависимости от метода запроса
