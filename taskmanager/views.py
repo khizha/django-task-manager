@@ -2,7 +2,11 @@ from django.utils import timezone
 from django.db.models import Count
 
 from rest_framework.decorators import api_view, action, permission_classes
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.generics import (
+    ListAPIView,
+    ListCreateAPIView,
+    RetrieveUpdateDestroyAPIView
+)
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
@@ -16,7 +20,7 @@ from .serializers import (
     SubTaskCreateSerializer,
     CategorySerializer,
 )
-from .permissions import CustomPermission
+from .permissions import CustomPermission, IsOwnerOrReadOnly
 
 
 # Create your views here.
@@ -51,7 +55,7 @@ class TaskListCreateView(ListCreateAPIView):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
 
-    permission_classes = [CustomPermission]
+    permission_classes = [IsOwnerOrReadOnly]
 
     # фильтрация по статусу и дедлайну
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -68,15 +72,49 @@ class TaskListCreateView(ListCreateAPIView):
             return TaskCreateSerializer
         return TaskSerializer
 
+    # автоматическое назначение владельца задаси при создании
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.is_staff or user.is_superuser:
+            return Task.objects.all()
+
+        return Task.objects.filter(owner=user)
+
+
 
 # получение, обновление и удаление одной задачи
 class TaskDetailView(RetrieveUpdateDestroyAPIView):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
-    permission_classes = [CustomPermission]
+    permission_classes = [IsOwnerOrReadOnly]
     lookup_url_kwarg = 'task_id' # id задачи будет передаваться как параметр task_id в url. если задача gj id не будет
                                  # найдена, то Generic View сам вернёт 404
 
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.is_staff or user.is_superuser:
+            return Task.objects.all()
+
+        return Task.objects.filter(owner=user)
+
+
+# получение задач текущего пользователя
+class UserTaskListView(ListAPIView):
+    serializer_class = TaskSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.is_staff or user.is_superuser:
+            return Task.objects.all()
+
+        return Task.objects.filter(owner=user)
 
 
 # Получение статистики по задачам
@@ -117,7 +155,7 @@ class SubTaskPagination(PageNumberPagination):
 # Получение списка подзадач и создание новой подзадачи
 class SubTaskListCreateView(ListCreateAPIView):
     queryset = SubTask.objects.all()
-    permission_classes = [CustomPermission]
+    permission_classes = [IsOwnerOrReadOnly]
 
     # пагинация: по 3 подзадачи на странице
     pagination_class = SubTaskPagination
@@ -144,11 +182,23 @@ class SubTaskListCreateView(ListCreateAPIView):
             return SubTaskCreateSerializer
         return SubTaskSerializer
 
+    # автоматическая привязка подзадачи к текущему пользователю при создании подзадачи
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.is_staff or user.is_superuser:
+            return SubTask.objects.all()
+
+        return SubTask.objects.filter(owner=user)
+
 
 # Получение, обновление и удаление одной подзадачи
 class SubTaskDetailUpdateDeleteView(RetrieveUpdateDestroyAPIView):
     queryset = SubTask.objects.all()
-    permission_classes = [CustomPermission]
+    permission_classes = [IsOwnerOrReadOnly]
     lookup_url_kwarg = 'subtask_id'
 
     # сериализатор - в зависимости от метода запроса
@@ -156,3 +206,11 @@ class SubTaskDetailUpdateDeleteView(RetrieveUpdateDestroyAPIView):
         if self.request.method in ['PUT', 'PATCH']:
             return SubTaskCreateSerializer
         return SubTaskSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.is_staff or user.is_superuser:
+            return SubTask.objects.all()
+
+        return SubTask.objects.filter(owner=user)

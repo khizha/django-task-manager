@@ -12,6 +12,7 @@ from .views import (
     SubTaskListCreateView,
     SubTaskDetailUpdateDeleteView,
     CategoryViewSet,
+    UserTaskListView,
 )
 
 # настройка маршрутов для категорий
@@ -53,5 +54,12 @@ urlpatterns = [
         'token/refresh/',
         TokenRefreshView.as_view(),
         name='token_refresh'
+    ),
+
+    # Получение задач текущего пользователя
+    path(
+        'user-tasks/',
+        UserTaskListView.as_view(),
+        name='user-tasks'
     ),
 ]

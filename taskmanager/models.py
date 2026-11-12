@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.conf import settings
 
 # возвращает только неудалённые категории
 class SoftDeleteManager(models.Manager):
@@ -62,6 +63,11 @@ class Task(models.Model):
                                                          # создании объекта.
 
     created_date = models.DateField(auto_now_add=True)  # Дата создания объекта - для проверки уникальности.
+    owner = models.ForeignKey(                          # Владелец задачи
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,                       # При удалении владельца удаляются его задачи
+        related_name='tasks'
+    )
 
     class Meta:                                         # Дополнительные настройки модели Task. В нашем случае -
                                                         # Имя таблицы в базе данных: 'task_manager_task'.
@@ -100,6 +106,11 @@ class SubTask(models.Model):
     deadline = models.DateTimeField()                         # Дата и время дедлайна.
     created_at = models.DateTimeField(auto_now_add=True)      # Дата и время создания. Заполненяется автоматически при
                                                               # создании объекта.
+    owner = models.ForeignKey(                                # Владелец подзадачи
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='subtasks'
+    )
 
     class Meta:                                         # Дополнительные настройки модели SubTask. В нашем случае -
                                                         # Имя таблицы в базе данных: 'task_manager_subtask'.

@@ -11,12 +11,14 @@ class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = '__all__'
+        read_only_fields = ['owner']
 
 
 class TaskCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = '__all__'
+        read_only_fields = ['owner']
 
     def validate_deadline(self, value):
         if value < timezone.now():
@@ -33,6 +35,17 @@ class SubTaskCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubTask
         fields = '__all__'
+        read_only_fields = ['owner']
+
+    def validate_task(self, value):
+        user = self.context['request'].user
+
+        if value.owner != user:
+            raise serializers.ValidationError(
+                'Нельзя создавать подзадачи для чужих задач.'
+            )
+
+        return value
 
 
 class CategoryCreateSerializer(serializers.ModelSerializer):
@@ -74,6 +87,7 @@ class SubTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubTask
         fields = '__all__'
+        read_only_fields = ['owner']
 
 
 class TaskDetailSerializer(serializers.ModelSerializer):
